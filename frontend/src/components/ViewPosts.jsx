@@ -222,7 +222,7 @@ export default function ViewPosts() {
       // Get full post data for selected posts to include template information
       const selectedPostsData = posts.filter(post => selectedPosts.has(post._id));
       
-      const response = await fetch('http://localhost:5000/api/pdf/generate', {
+      const response = await fetch('https://sudentmagazine-api.vercel.app/api/pdf/generate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
