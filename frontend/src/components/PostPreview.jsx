@@ -9,7 +9,7 @@ export default function PostPreview() {
   useEffect(() => {
     async function fetchPost() {
       try {
-        const response = await fetch(`https://sudentmagazine-api.vercel.app/publishedposts/${id}`);
+        const response = await fetch(`https://sudentmagazine-api.vercel.app/api/publishedposts/${id}`);
         const data = await response.json();
         setPost(data);
 
