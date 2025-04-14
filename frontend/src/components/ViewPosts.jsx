@@ -326,8 +326,8 @@ export default function ViewPosts() {
       studentNames: selectedPost.studentNames,
       content: selectedPost.content,
       coordinatorName: selectedPost.coordinatorName,
-      coordinatorPic: selectedPost.coordinatorPic ? `http://localhost:5000/${selectedPost.coordinatorPic}` : null,
-      eventPics: selectedPost.eventPics.map(pic => `http://localhost:5000/${pic}`)
+      coordinatorPic: selectedPost.coordinatorPic,
+      eventPics: selectedPost
     };
 
     return (
