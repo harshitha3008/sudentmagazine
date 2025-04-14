@@ -19,7 +19,7 @@ connectDB();
 const app = express();
 app.use(cors({
   origin:["https://sudentmagazine-frontend.vercel.app"],
-  methods:["POST", "GET"],
+  methods:["POST", "GET", "PUT", "DELETE", "PATCH", "OPTIONS"],
   credentials: true
 }))
 app.use(express.json());
