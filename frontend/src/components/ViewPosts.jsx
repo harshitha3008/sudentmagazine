@@ -327,7 +327,7 @@ export default function ViewPosts() {
       content: selectedPost.content,
       coordinatorName: selectedPost.coordinatorName,
       coordinatorPic: selectedPost.coordinatorPic,
-      eventPics: selectedPost
+      eventPics: selectedPost.eventPics
     };
 
     return (
