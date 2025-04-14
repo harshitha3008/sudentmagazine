@@ -178,7 +178,7 @@ export default function StudentDashboard() {
 
   const fetchNotifications = async () => {
     try {
-      const response = await fetch('https://sudentmagazine-api.vercel.app/notifications');
+      const response = await fetch('https://sudentmagazine-api.vercel.app/api/notifications');
       const data = await response.json();
 
       if (response.ok) {
@@ -380,7 +380,7 @@ export default function StudentDashboard() {
     }
   
     try {
-      const response = await fetch('https://sudentmagazine-api.vercel.app/posts/create', {
+      const response = await fetch('https://sudentmagazine-api.vercel.app/api/posts/create', {
         method: 'POST',
         body: formData,
       });

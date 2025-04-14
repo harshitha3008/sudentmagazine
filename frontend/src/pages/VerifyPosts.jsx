@@ -8,7 +8,7 @@ export default function VerifyPosts() {
   useEffect(() => {
     const token = localStorage.getItem('token'); 
 
-    fetch('https://sudentmagazine-api.vercel.app/posts', {
+    fetch('https://sudentmagazine-api.vercel.app/api/posts', {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',

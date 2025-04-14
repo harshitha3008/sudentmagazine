@@ -116,7 +116,7 @@ export default function ViewPosts() {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch('https://sudentmagazine-api.vercel.app/publishedposts');
+      const response = await fetch('https://sudentmagazine-api.vercel.app/api/publishedposts');
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
