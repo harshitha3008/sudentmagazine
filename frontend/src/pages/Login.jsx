@@ -16,7 +16,7 @@ export default function Login() {
     setError('');
   
     try {
-      const res = await axios.post('http://localhost:5000/api/auth/login', formData);
+      const res = await axios.post('https://sudentmagazine-api.vercel.app/auth/login', formData);
       console.log('JWT Token:', res.data.token); 
       console.log('User Role:', res.data.role);
   

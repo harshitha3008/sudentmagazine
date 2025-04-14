@@ -54,12 +54,12 @@ export default function PostDetails() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`http://localhost:5000/api/posts/${id}`)
+    fetch(`https://sudentmagazine-api.vercel.app/posts/${id}`)
       .then((res) => res.json())
       .then((data) => {
         setPost(data);
         if (data.coordinatorName) {
-          return fetch(`http://localhost:5000/api/users/coordinator/${data.coordinatorName}`);
+          return fetch(`https://sudentmagazine-api.vercel.app/users/coordinator/${data.coordinatorName}`);
         } else {
           throw new Error('Coordinator data not found');
         }
@@ -82,7 +82,7 @@ export default function PostDetails() {
     setIsSubmitting(true);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:5000/api/posts/${id}/${action}`, {
+      const response = await fetch(`https://sudentmagazine-api.vercel.app/posts/${id}/${action}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

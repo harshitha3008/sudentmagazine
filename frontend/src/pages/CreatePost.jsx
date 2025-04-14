@@ -305,7 +305,7 @@ export default function CreatePost() {
     }
   
     try {
-      const response = await fetch('http://localhost:5000/api/posts/create', {
+      const response = await fetch('https://sudentmagazine-api.vercel.app/posts/create', {
         method: 'POST',
         body: formData,
       });
