@@ -6,7 +6,7 @@ import axios from 'axios';
 // Create API instance with serverless-friendly configuration
 const api = axios.create({
   baseURL: 'https://sudentmagazine-api.vercel.app',
-  timeout: 30000, // 30 seconds timeout
+  timeout: 300000, // 30 seconds timeout
   headers: {
     'Content-Type': 'application/json',
   }
@@ -60,8 +60,8 @@ export default function MagazineUpload() {
       const selectedFile = e.target.files[0];
       
       // Validate file size (limit to 10MB for better serverless compatibility)
-      if (selectedFile.size > 10 * 1024 * 1024) {
-        alert("File is too large. Please select a file under 10MB.");
+      if (selectedFile.size > 200 * 1024 * 1024) {
+        alert("File is too large. Please select a file under 200MB.");
         return;
       }
       
