@@ -1,9 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, Upload, ArrowLeft, Calendar } from 'lucide-react';
+import { FileText, Upload, ArrowLeft } from 'lucide-react';
 import axios from 'axios'; 
+
+// Create API instance with better error handling
 const api = axios.create({
-  baseURL: 'https://sudentmagazine-api.vercel.app' // Use your backend server port (likely 5000 based on your server.js)
+  baseURL: 'https://sudentmagazine-api.vercel.app',
+  withCredentials: true,
+  timeout: 60000, // Increase timeout for large file uploads
+  headers: {
+    'Content-Type': 'application/json',
+  }
 });
 
 export default function MagazineUpload() {
@@ -11,7 +18,8 @@ export default function MagazineUpload() {
   const [selectedQuarter, setSelectedQuarter] = useState(null);
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
-  const [magazines, setMagazines] = useState([]); // Initialize as empty array
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [magazines, setMagazines] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const currentYear = new Date().getFullYear();
@@ -29,12 +37,14 @@ export default function MagazineUpload() {
       setIsLoading(true);
       try {
         const response = await api.get('/api/magazines');
+        console.log("Magazines data:", response.data);
+        
         // Ensure we're setting an array
         setMagazines(Array.isArray(response.data) ? response.data : []);
         setError(null);
       } catch (error) {
         console.error("Error fetching magazines:", error);
-        setError("Failed to load magazines");
+        setError("Failed to load magazines: " + (error.response?.data?.message || error.message));
         // Set to empty array on error
         setMagazines([]);
       } finally {
@@ -55,6 +65,7 @@ export default function MagazineUpload() {
     if (!file || !selectedQuarter) return;
     
     setUploading(true);
+    setUploadProgress(0);
     
     try {
       // Create FormData and append file
@@ -64,12 +75,31 @@ export default function MagazineUpload() {
       formData.append('year', currentYear);
       formData.append('title', `${selectedQuarter.season} ${selectedQuarter.period} Magazine`);
       
-      // Real API call to upload the PDF
-      const response = await api.post('/api/magazines/upload', formData, {
+      // Test connection first
+      try {
+        await api.get('/api/magazines-debug');
+        console.log("API connection test successful");
+      } catch (testError) {
+        console.error("API connection test failed:", testError);
+        // Continue anyway
+      }
+      
+      // Real API call to upload the PDF with progress tracking
+      const response = await axios({
+        method: 'post',
+        url: 'https://sudentmagazine-api.vercel.app/api/magazines/upload',
+        data: formData,
         headers: {
-          'Content-Type': 'multipart/form-data'
+          'Content-Type': 'multipart/form-data',
+        },
+        withCredentials: true,
+        onUploadProgress: (progressEvent) => {
+          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          setUploadProgress(percentCompleted);
         }
       });
+      
+      console.log("Upload response:", response.data);
       
       if (response.data.success) {
         // Update local state with new magazine from server response
@@ -89,13 +119,35 @@ export default function MagazineUpload() {
         setUploading(false);
         setSelectedQuarter(null);
         setFile(null);
+        setUploadProgress(0);
         
         alert(`${selectedQuarter.season} ${selectedQuarter.period} magazine uploaded successfully!`);
+        
+        // Refresh magazine list
+        const refreshResponse = await api.get('/api/magazines');
+        setMagazines(Array.isArray(refreshResponse.data) ? refreshResponse.data : []);
       }
     } catch (error) {
       console.error("Error uploading magazine:", error);
-      alert("Error uploading magazine. Please try again.");
+      let errorMessage = "Error uploading magazine. ";
+      
+      if (error.response) {
+        // The request was made and the server responded with a status code
+        console.error("Server response error:", error.response.data);
+        errorMessage += error.response.data.message || error.response.statusText;
+      } else if (error.request) {
+        // The request was made but no response was received
+        console.error("No response received:", error.request);
+        errorMessage += "No response from server. Check your network connection or CORS configuration.";
+      } else {
+        // Something happened in setting up the request
+        console.error("Request setup error:", error.message);
+        errorMessage += error.message;
+      }
+      
+      alert(errorMessage);
       setUploading(false);
+      setUploadProgress(0);
     }
   };
   
@@ -169,6 +221,20 @@ export default function MagazineUpload() {
                 </p>
               </label>
             </div>
+            
+            {uploading && (
+              <div className="mt-4">
+                <div className="w-full bg-gray-200 rounded-full h-2.5">
+                  <div 
+                    className="bg-blue-600 h-2.5 rounded-full" 
+                    style={{ width: `${uploadProgress}%` }}
+                  ></div>
+                </div>
+                <p className="text-sm text-gray-600 mt-1 text-center">
+                  Uploading: {uploadProgress}%
+                </p>
+              </div>
+            )}
             
             <div className="mt-6 flex justify-end">
               <button
