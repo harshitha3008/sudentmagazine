@@ -6,11 +6,18 @@ const fs = require('fs');
 const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { v4: uuidv4 } = require('uuid');
 const Magazine = require('../models/Magazine');
+const cors = require('cors');
 
-// Debug route to verify this module is loaded correctly
-router.get('/magazines-debug', (req, res) => {
-  res.json({ message: 'Magazine routes are loaded correctly' });
-});
+// Apply CORS specifically for this router
+const corsOptions = {
+  origin: ["https://sudentmagazine-frontend.vercel.app"],
+  methods: ["POST", "GET", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  credentials: true,
+  exposedHeaders: ['Content-Length', 'Content-Type']
+};
+
+// Apply CORS middleware to all routes in this router
+router.use(cors(corsOptions));
 
 // Configure multer storage
 // AWS S3 client v3 setup
@@ -21,6 +28,12 @@ const s3Client = new S3Client({
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
   }
 });
+
+// Ensure temp directory exists
+const tempDir = path.join(__dirname, '../temp');
+if (!fs.existsSync(tempDir)) {
+  fs.mkdirSync(tempDir, { recursive: true });
+}
 
 // Multer local storage before upload
 const upload = multer({
@@ -40,6 +53,11 @@ const upload = multer({
       cb(new Error('Only PDF files are allowed'), false);
     }
   }
+});
+
+// Debug route to verify this module is loaded correctly
+router.get('/magazines-debug', (req, res) => {
+  res.json({ message: 'Magazine routes are loaded correctly' });
 });
 
 // Get all magazines with optional year filter
@@ -67,18 +85,27 @@ router.get('/magazines', (req, res) => {
     });
 });
 
-// Upload a new magazine
-router.post('/magazines/upload', upload.single('file'), async (req, res) => {
+// Handle preflight OPTIONS requests for the upload endpoint
+router.options('/magazines/upload', cors(corsOptions));
+
+// Upload a new magazine - apply CORS specifically to this route
+router.post('/magazines/upload', cors(corsOptions), upload.single('file'), async (req, res) => {
   try {
+    console.log('Magazine upload request received');
     const { quarter, year, title } = req.body;
+    
     if (!req.file) {
       return res.status(400).json({ success: false, message: 'No file uploaded' });
     }
 
+    console.log(`Processing file: ${req.file.originalname}, size: ${req.file.size} bytes`);
+    
     const fileContent = fs.readFileSync(req.file.path);
     const fileExtension = path.extname(req.file.originalname);
     const fileName = `magazines/magazine_${year}_q${quarter}_${uuidv4()}${fileExtension}`;
 
+    console.log(`Uploading to S3: ${fileName}`);
+    
     const uploadCommand = new PutObjectCommand({
       Bucket: 'studentmagazine',
       Key: fileName,
@@ -88,11 +115,15 @@ router.post('/magazines/upload', upload.single('file'), async (req, res) => {
     });
 
     await s3Client.send(uploadCommand);
-    fs.unlinkSync(req.file.path); // Clean up local file
+    console.log('S3 upload successful');
+    
+    // Clean up local file
+    fs.unlinkSync(req.file.path);
 
     const region = process.env.AWS_REGION || 'ap-south-1';
     const fileUrl = `https://studentmagazine.s3.${region}.amazonaws.com/${fileName}`;
 
+    console.log(`File URL: ${fileUrl}`);
 
     const existingMagazine = await Magazine.findOne({
       quarter: parseInt(quarter),
@@ -100,27 +131,39 @@ router.post('/magazines/upload', upload.single('file'), async (req, res) => {
     });
 
     if (existingMagazine) {
+      console.log(`Updating existing magazine for Q${quarter} ${year}`);
       existingMagazine.fileUrl = fileUrl;
       existingMagazine.uploadedAt = Date.now();
       await existingMagazine.save();
-      return res.json({ success: true, message: 'Magazine updated', magazine: existingMagazine });
+      return res.json({ 
+        success: true, 
+        message: 'Magazine updated', 
+        magazine: existingMagazine 
+      });
     }
 
+    console.log(`Creating new magazine for Q${quarter} ${year}`);
     const newMagazine = new Magazine({
       title,
       quarter: parseInt(quarter),
       year: parseInt(year),
-      fileUrl: fileUrl, // if not used anymore, you can also remove it from your schema
+      fileUrl: fileUrl,
     });
     
-
     await newMagazine.save();
+    console.log('Magazine saved to database');
 
-
-    res.status(201).json({ success: true, newMagazine });
+    res.status(201).json({ 
+      success: true, 
+      magazine: newMagazine
+    });
   } catch (error) {
     console.error("Upload error:", error);
-    res.status(500).json({ success: false, message: 'Upload failed', error: error.message });
+    res.status(500).json({ 
+      success: false, 
+      message: 'Upload failed', 
+      error: error.message 
+    });
   }
 });
 
@@ -165,6 +208,5 @@ router.delete('/magazines/:id', async (req, res) => {
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
-
 
 module.exports = router;
