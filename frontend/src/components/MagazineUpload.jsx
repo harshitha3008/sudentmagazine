@@ -3,11 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { FileText, Upload, ArrowLeft } from 'lucide-react';
 import axios from 'axios'; 
 
-// Create API instance with better error handling
+// Create API instance with serverless-friendly configuration
 const api = axios.create({
   baseURL: 'https://sudentmagazine-api.vercel.app',
-  withCredentials: true,
-  timeout: 60000, // Increase timeout for large file uploads
+  timeout: 30000, // 30 seconds timeout
   headers: {
     'Content-Type': 'application/json',
   }
@@ -22,6 +21,7 @@ export default function MagazineUpload() {
   const [magazines, setMagazines] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [statusMessage, setStatusMessage] = useState("");
   const currentYear = new Date().getFullYear();
 
   const quarterlyMagazines = [
@@ -57,7 +57,21 @@ export default function MagazineUpload() {
   
   const handleFileChange = (e) => {
     if (e.target.files[0]) {
-      setFile(e.target.files[0]);
+      const selectedFile = e.target.files[0];
+      
+      // Validate file size (limit to 10MB for better serverless compatibility)
+      if (selectedFile.size > 10 * 1024 * 1024) {
+        alert("File is too large. Please select a file under 10MB.");
+        return;
+      }
+      
+      // Validate file type
+      if (selectedFile.type !== 'application/pdf') {
+        alert("Only PDF files are allowed.");
+        return;
+      }
+      
+      setFile(selectedFile);
     }
   };
   
@@ -66,6 +80,7 @@ export default function MagazineUpload() {
     
     setUploading(true);
     setUploadProgress(0);
+    setStatusMessage("Preparing upload...");
     
     try {
       // Create FormData and append file
@@ -75,14 +90,10 @@ export default function MagazineUpload() {
       formData.append('year', currentYear);
       formData.append('title', `${selectedQuarter.season} ${selectedQuarter.period} Magazine`);
       
-      // Test connection first
-      try {
-        await api.get('/api/magazines-debug');
-        console.log("API connection test successful");
-      } catch (testError) {
-        console.error("API connection test failed:", testError);
-        // Continue anyway
-      }
+      // Add a timestamp to prevent caching issues
+      formData.append('timestamp', Date.now());
+      
+      setStatusMessage("Starting upload to server...");
       
       // Real API call to upload the PDF with progress tracking
       const response = await axios({
@@ -92,13 +103,14 @@ export default function MagazineUpload() {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
-        withCredentials: true,
         onUploadProgress: (progressEvent) => {
           const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
           setUploadProgress(percentCompleted);
+          setStatusMessage(`Uploading: ${percentCompleted}% complete`);
         }
       });
       
+      setStatusMessage("Upload completed. Processing...");
       console.log("Upload response:", response.data);
       
       if (response.data.success) {
@@ -120,12 +132,20 @@ export default function MagazineUpload() {
         setSelectedQuarter(null);
         setFile(null);
         setUploadProgress(0);
+        setStatusMessage("");
         
         alert(`${selectedQuarter.season} ${selectedQuarter.period} magazine uploaded successfully!`);
         
         // Refresh magazine list
-        const refreshResponse = await api.get('/api/magazines');
-        setMagazines(Array.isArray(refreshResponse.data) ? refreshResponse.data : []);
+        try {
+          const refreshResponse = await api.get('/api/magazines');
+          setMagazines(Array.isArray(refreshResponse.data) ? refreshResponse.data : []);
+        } catch (refreshError) {
+          console.error("Error refreshing magazines:", refreshError);
+          // Continue without refreshing
+        }
+      } else {
+        throw new Error(response.data.message || "Upload failed with unknown error");
       }
     } catch (error) {
       console.error("Error uploading magazine:", error);
@@ -138,7 +158,7 @@ export default function MagazineUpload() {
       } else if (error.request) {
         // The request was made but no response was received
         console.error("No response received:", error.request);
-        errorMessage += "No response from server. Check your network connection or CORS configuration.";
+        errorMessage += "No response from server. This may be due to server timeout with large files or network issues.";
       } else {
         // Something happened in setting up the request
         console.error("Request setup error:", error.message);
@@ -146,8 +166,10 @@ export default function MagazineUpload() {
       }
       
       alert(errorMessage);
+      setError(errorMessage);
       setUploading(false);
       setUploadProgress(0);
+      setStatusMessage("");
     }
   };
   
@@ -179,6 +201,12 @@ export default function MagazineUpload() {
         {error && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
             {error}
+            <button 
+              onClick={() => setError(null)} 
+              className="float-right font-bold"
+            >
+              &times;
+            </button>
           </div>
         )}
         
@@ -217,7 +245,7 @@ export default function MagazineUpload() {
                   {file ? file.name : "Select PDF file"}
                 </p>
                 <p className="text-sm text-gray-500">
-                  {file ? `${(file.size / (1024 * 1024)).toFixed(2)} MB` : "PDF files only"}
+                  {file ? `${(file.size / (1024 * 1024)).toFixed(2)} MB` : "PDF files only, max 10MB"}
                 </p>
               </label>
             </div>
@@ -231,7 +259,7 @@ export default function MagazineUpload() {
                   ></div>
                 </div>
                 <p className="text-sm text-gray-600 mt-1 text-center">
-                  Uploading: {uploadProgress}%
+                  {statusMessage || `Uploading: ${uploadProgress}%`}
                 </p>
               </div>
             )}
