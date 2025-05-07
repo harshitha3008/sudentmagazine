@@ -17,11 +17,14 @@ dotenv.config();
 connectDB();
 
 const app = express();
+// Make sure this is at the top of your middleware stack
 app.use(cors({
-  origin:["https://sudentmagazine-frontend.vercel.app"],
-  methods:["POST", "GET", "PUT", "DELETE", "PATCH", "OPTIONS"],
-  credentials: true
-}))
+  origin: ["https://sudentmagazine-frontend.vercel.app"],
+  methods: ["POST", "GET", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  credentials: true,
+  // Add this line to ensure headers are properly exposed
+  exposedHeaders: ['Content-Length', 'Content-Type']
+}));
 app.use(express.json());
 
 // Routes
