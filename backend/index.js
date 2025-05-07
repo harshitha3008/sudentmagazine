@@ -28,7 +28,7 @@ app.use(cors({
 
 // Add raw body parsing for webhook support
 app.use(express.json({ 
-  limit: '50mb',
+  limit: '200mb',
   verify: (req, res, buf) => {
     req.rawBody = buf.toString();
   }
@@ -58,6 +58,7 @@ app.use("/api/posts", posts);
 app.use("/api", notificationRoutes);
 app.use("/api", pdfRoutes);
 app.use("/api", magazineRoutes);
+app.use(express.urlencoded({ limit: '200mb', extended: true }));
 
 // Health check route
 app.get("/api/health", (req, res) => {
