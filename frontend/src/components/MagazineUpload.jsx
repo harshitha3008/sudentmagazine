@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { FileText, Upload, ArrowLeft, Calendar } from 'lucide-react';
 import axios from 'axios'; 
 const api = axios.create({
-  baseURL: 'https://sudentmagazine-api.vercel.app/' // Use your backend server port (likely 5000 based on your server.js)
+  baseURL: 'https://sudentmagazine-api.vercel.app' // Use your backend server port (likely 5000 based on your server.js)
 });
 
 export default function MagazineUpload() {
