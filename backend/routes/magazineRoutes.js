@@ -1,16 +1,15 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
 const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { v4: uuidv4 } = require('uuid');
 const Magazine = require('../models/Magazine');
 const cors = require('cors');
+const os = require('os');
 
 // Apply CORS specifically for this router
 const corsOptions = {
-  origin: ["https://sudentmagazine-frontend.vercel.app"],
+  origin: "https://sudentmagazine-frontend.vercel.app",
   methods: ["POST", "GET", "PUT", "DELETE", "PATCH", "OPTIONS"],
   credentials: true,
   exposedHeaders: ['Content-Length', 'Content-Type']
@@ -19,33 +18,39 @@ const corsOptions = {
 // Apply CORS middleware to all routes in this router
 router.use(cors(corsOptions));
 
-// Configure multer storage
-// AWS S3 client v3 setup
-const s3Client = new S3Client({
-  region: process.env.AWS_REGION || 'ap-south-1',
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+// AWS S3 client v3 setup with more graceful error handling
+const createS3Client = () => {
+  try {
+    return new S3Client({
+      region: process.env.AWS_REGION || 'ap-south-1',
+      credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+      }
+    });
+  } catch (error) {
+    console.error("Error creating S3 client:", error);
+    throw new Error("Failed to initialize S3 client: " + error.message);
   }
-});
+};
 
-// Ensure temp directory exists
-const tempDir = path.join(__dirname, '../temp');
-if (!fs.existsSync(tempDir)) {
-  fs.mkdirSync(tempDir, { recursive: true });
+// Initialize S3 client
+let s3Client;
+try {
+  s3Client = createS3Client();
+  console.log("S3 client initialized successfully");
+} catch (error) {
+  console.error("S3 client initialization failed:", error);
+  // We'll create it on demand when needed
 }
 
-// Multer local storage before upload
+// Use memory storage for serverless environment
+const storage = multer.memoryStorage();
 const upload = multer({
-  storage: multer.diskStorage({
-    destination: (req, file, cb) => {
-      cb(null, 'temp/');
-    },
-    filename: (req, file, cb) => {
-      cb(null, `${Date.now()}_${file.originalname}`);
-    }
-  }),
-  limits: { fileSize: 200 * 1024 * 1024 },
+  storage: storage,
+  limits: { 
+    fileSize: 50 * 1024 * 1024 // Limit to 50MB for serverless functions
+  },
   fileFilter: (req, file, cb) => {
     if (file.mimetype === 'application/pdf') {
       cb(null, true);
@@ -57,32 +62,39 @@ const upload = multer({
 
 // Debug route to verify this module is loaded correctly
 router.get('/magazines-debug', (req, res) => {
-  res.json({ message: 'Magazine routes are loaded correctly' });
+  res.json({ 
+    message: 'Magazine routes are loaded correctly',
+    tempDir: os.tmpdir(),
+    environment: process.env.NODE_ENV,
+    memoryLimit: process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE || 'unknown'
+  });
 });
 
 // Get all magazines with optional year filter
-router.get('/magazines', (req, res) => {
+router.get('/magazines', async (req, res) => {
   console.log('GET /api/magazines endpoint hit');
   
-  // Create query object based on parameters
-  const query = {};
-  
-  // If year parameter exists, add it to the query
-  if (req.query.year) {
-    query.year = parseInt(req.query.year);
-    console.log(`Filtering by year: ${query.year}`);
-  }
-  
-  Magazine.find(query)
-    .sort({ year: -1, quarter: -1 })
-    .then(magazines => {
-      console.log(`Found ${magazines.length} magazines`);
-      res.json(magazines);
-    })
-    .catch(err => {
-      console.error('Error fetching magazines:', err);
-      res.status(500).json({ success: false, message: 'Server error' });
+  try {
+    // Create query object based on parameters
+    const query = {};
+    
+    // If year parameter exists, add it to the query
+    if (req.query.year) {
+      query.year = parseInt(req.query.year);
+      console.log(`Filtering by year: ${query.year}`);
+    }
+    
+    const magazines = await Magazine.find(query).sort({ year: -1, quarter: -1 });
+    console.log(`Found ${magazines.length} magazines`);
+    res.json(magazines);
+  } catch (err) {
+    console.error('Error fetching magazines:', err);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Server error', 
+      error: err.message 
     });
+  }
 });
 
 // Handle preflight OPTIONS requests for the upload endpoint
@@ -90,8 +102,10 @@ router.options('/magazines/upload', cors(corsOptions));
 
 // Upload a new magazine - apply CORS specifically to this route
 router.post('/magazines/upload', cors(corsOptions), upload.single('file'), async (req, res) => {
+  console.log('Magazine upload request received');
+  
   try {
-    console.log('Magazine upload request received');
+    // Validate request
     const { quarter, year, title } = req.body;
     
     if (!req.file) {
@@ -100,25 +114,27 @@ router.post('/magazines/upload', cors(corsOptions), upload.single('file'), async
 
     console.log(`Processing file: ${req.file.originalname}, size: ${req.file.size} bytes`);
     
-    const fileContent = fs.readFileSync(req.file.path);
-    const fileExtension = path.extname(req.file.originalname);
+    // Make sure S3 client is initialized
+    if (!s3Client) {
+      console.log("Creating S3 client on demand");
+      s3Client = createS3Client();
+    }
+    
+    const fileExtension = '.pdf'; // Since we're filtering for PDFs only
     const fileName = `magazines/magazine_${year}_q${quarter}_${uuidv4()}${fileExtension}`;
 
     console.log(`Uploading to S3: ${fileName}`);
     
+    // Upload directly from memory buffer (no filesystem needed)
     const uploadCommand = new PutObjectCommand({
       Bucket: 'studentmagazine',
       Key: fileName,
-      Body: fileContent,
+      Body: req.file.buffer,
       ContentType: 'application/pdf',
-      // ACL: 'public-read'
     });
 
     await s3Client.send(uploadCommand);
     console.log('S3 upload successful');
-    
-    // Clean up local file
-    fs.unlinkSync(req.file.path);
 
     const region = process.env.AWS_REGION || 'ap-south-1';
     const fileUrl = `https://studentmagazine.s3.${region}.amazonaws.com/${fileName}`;
@@ -190,6 +206,12 @@ router.delete('/magazines/:id', async (req, res) => {
     const magazine = await Magazine.findById(req.params.id);
     if (!magazine) {
       return res.status(404).json({ success: false, message: 'Magazine not found' });
+    }
+
+    // Make sure S3 client is initialized
+    if (!s3Client) {
+      console.log("Creating S3 client on demand");
+      s3Client = createS3Client();
     }
 
     const s3Key = magazine.fileUrl.split('.amazonaws.com/')[1];
