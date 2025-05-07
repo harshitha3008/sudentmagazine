@@ -5,7 +5,7 @@ import axios from 'axios';
 
 // Create axios instance with base URL
 const api = axios.create({
-  baseURL: 'http://localhost:5000' // Use your backend server port
+  baseURL: 'https://sudentmagazine-api.vercel.app/' // Use your backend server port
 });
 
 export default function MagazineDetail() {
